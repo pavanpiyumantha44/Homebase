@@ -4,7 +4,7 @@ export interface Msg {
   content: string
 }
 
-const BASE = 'http://localhost:11434'
+export const BASE = 'http://localhost:11434'
 
 export async function listModels(): Promise<string[]> {
   const r = await fetch(`${BASE}/api/tags`)

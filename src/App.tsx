@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { listModels, streamChat } from '../src/Ollama'
-import { useStore, useLive } from '../src/Store'
+import { listModels, streamChat, type Msg } from './Ollama'
+import { useStore, useLive } from './Store'
 import Markdown from './Markdown'
+import Stats from './Stats'
+import Logo from './Logo'
+import { useFolder } from './UseFolder'
 
 type Theme = 'light' | 'dark'
+
+// If the model sends nothing for this long, the request is stopped and can be retried.
+// The timer restarts on every token, so long answers that keep streaming are never cut off.
+const STALL_MS = 90_000
 
 // Apply the saved (or OS) theme before first paint to avoid a flash.
 const initialTheme = (): Theme => {
@@ -30,14 +37,18 @@ export default function App() {
   const live = useLive()
   const [models, setModels] = useState<string[]>([])
   const [err, setErr] = useState('')
+  const [failed, setFailed] = useState<{ chatId: string; msg: string } | null>(null)
   const [input, setInput] = useState('')
   const [nav, setNav] = useState(false)
   const [theme, setTheme] = useState<Theme>(() => document.documentElement.dataset.theme as Theme)
+  const folder = useFolder()
+  const fileInput = useRef<HTMLInputElement>(null)
   const abort = useRef<AbortController | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
 
   const chat = chats.find((c) => c.id === activeId)
   const showLive = live.busy && live.chatId === activeId
+  const showFail = !!failed && failed.chatId === activeId && !live.busy
 
   const toggleTheme = () => {
     const t: Theme = theme === 'dark' ? 'light' : 'dark'
@@ -59,39 +70,67 @@ export default function App() {
   useEffect(() => {
     const el = scroller.current
     if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 160) el.scrollTop = el.scrollHeight
-  }, [chat?.messages.length, live.text, showLive])
+  }, [chat?.messages.length, live.text, showLive, showFail])
 
-  async function send(override?: string) {
-    const text = (override ?? input).trim()
-    if (!text || live.busy || !model) return
-    setInput('')
-    setErr('')
-
-    const id = activeId ?? newChat()
-    const prev = useStore.getState().chats.find((c) => c.id === id)?.messages ?? []
-    const history = [...prev, { role: 'user' as const, content: text }]
-    addMessage(id, history[history.length - 1])
-    if (prev.length === 0) rename(id, text.slice(0, 40))
-
+  // Streams a reply for `history` (which must end with a user message) into chat `id`.
+  async function run(id: string, history: Msg[]) {
     const ctrl = new AbortController()
     abort.current = ctrl
     let buf = ''
     let raf = 0
-    useLive.setState({ busy: true, text: '', chatId: id })
+    let timedOut = false
+    let hadError = false
+    let timer = 0
+    const arm = () => {
+      clearTimeout(timer)
+      timer = window.setTimeout(() => { timedOut = true; ctrl.abort() }, STALL_MS)
+    }
 
+    useLive.setState({ busy: true, text: '', chatId: id })
+    arm()
     try {
       await streamChat(model, history, (t) => {
+        arm()
         buf += t
         // one UI update per frame, not per token
         if (!raf) raf = requestAnimationFrame(() => { raf = 0; useLive.setState({ text: buf }) })
       }, ctrl.signal)
     } catch (e) {
-      if ((e as Error).name !== 'AbortError') setErr((e as Error).message)
+      if (timedOut) {
+        hadError = true
+        setFailed({ chatId: id, msg: `No response from the model for ${STALL_MS / 1000}s. It may still be loading or out of memory.` })
+      } else if ((e as Error).name !== 'AbortError') {
+        hadError = true
+        setFailed({ chatId: id, msg: (e as Error).message })
+      }
     } finally {
+      clearTimeout(timer)
       cancelAnimationFrame(raf)
-      if (buf) addMessage(id, { role: 'assistant', content: buf })
+      // A manual Stop keeps the partial answer; a failure discards it so Retry starts clean.
+      if (buf && !hadError) addMessage(id, { role: 'assistant', content: buf })
       useLive.setState({ busy: false, text: '', chatId: null })
     }
+  }
+
+  function send(override?: string) {
+    const text = (override ?? input).trim()
+    if (!text || live.busy || !model) return
+    setInput('')
+    setErr('')
+    setFailed(null)
+
+    const id = activeId ?? newChat()
+    const prev = useStore.getState().chats.find((c) => c.id === id)?.messages ?? []
+    const msg: Msg = { role: 'user', content: text }
+    addMessage(id, msg)
+    if (prev.length === 0) rename(id, text.slice(0, 40))
+    run(id, [...prev, msg])
+  }
+
+  function retry() {
+    if (!chat || live.busy) return
+    setFailed(null)
+    run(chat.id, chat.messages)
   }
 
   const empty = !chat?.messages.length && !showLive
@@ -99,7 +138,7 @@ export default function App() {
   return (
     <div className={'app' + (nav ? ' nav-open' : '')}>
       <aside className="side">
-        <div className="brand"><span className="dot" />Ollama Chat</div>
+        <div className="brand"><Logo />Homebase</div>
         <button className="new" onClick={() => { newChat(); setNav(false) }}>+ New chat</button>
         <nav aria-label="Chat history">
           {chats.map((c) => (
@@ -113,6 +152,44 @@ export default function App() {
             </div>
           ))}
         </nav>
+        <div className="storage">
+          {folder.status === 'unsupported' && <p>This browser can't save to a folder. Use Export and Import to keep your chats.</p>}
+          {folder.status === 'none' && (
+            <>
+              <p>Chats stay in memory until you pick a folder to save them in.</p>
+              <button onClick={folder.connect}>Choose folder</button>
+            </>
+          )}
+          {folder.status === 'needs-permission' && (
+            <>
+              <p>Allow access to <b>{folder.name}</b> to load and save your chats.</p>
+              <button onClick={folder.reconnect}>Reconnect</button>
+            </>
+          )}
+          {folder.status === 'ready' && (
+            <>
+              <p><span className="ok" />Saved to <b>{folder.name}</b></p>
+              <button onClick={folder.connect}>Change folder</button>
+            </>
+          )}
+          {folder.error && <p className="bad">{folder.error}</p>}
+          <div className="row">
+            <button onClick={folder.exportChats} disabled={!chats.length}>Export</button>
+            <button onClick={() => fileInput.current?.click()}>Import</button>
+            <input
+              ref={fileInput}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) folder.importChats(f)
+                e.target.value = ''
+              }}
+            />
+          </div>
+          {folder.notice && <p>{folder.notice}</p>}
+        </div>
       </aside>
       <div className="scrim" onClick={() => setNav(false)} />
 
@@ -123,6 +200,7 @@ export default function App() {
             {models.map((m) => <option key={m}>{m}</option>)}
           </select>
           <span className="grow" />
+          <Stats />
           <button
             className="icon"
             onClick={toggleTheme}
@@ -157,6 +235,12 @@ export default function App() {
               <div className="ai">
                 <span className="av pulse">✦</span>
                 <div className="body">{live.text ? <Markdown text={live.text} /> : <Typing />}</div>
+              </div>
+            )}
+            {showFail && (
+              <div className="fail" role="alert">
+                <span>{failed!.msg}</span>
+                <button onClick={retry}>Retry</button>
               </div>
             )}
           </div>

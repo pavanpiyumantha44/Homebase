@@ -66,7 +66,7 @@ header select { background: var(--surface); border: 1px solid var(--line); borde
 .burger { display: none; }
 
 .scroll { flex: 1; overflow-y: auto; }
-.thread { max-width: 760px; margin: 0 auto; padding: 28px 20px 12px; display: flex; flex-direction: column; gap: 26px; }
+.thread { max-width: var(--chat-w); margin: 0 auto; padding: 28px 20px 72px; display: flex; flex-direction: column; gap: 26px; }
 
 /* empty state */
 .empty { text-align: center; margin-top: 14vh; }
@@ -82,7 +82,7 @@ header select { background: var(--surface); border: 1px solid var(--line); borde
 .ai { display: flex; gap: 14px; align-items: flex-start; }
 .av { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: 13px; margin-top: 2px; }
 .av.pulse { animation: glow 1.4s ease-in-out infinite; }
-.body { min-width: 0; line-height: 1.7; max-width: 70ch; overflow-wrap: anywhere; }
+.body { min-width: 0; line-height: 1.7; flex: 1; max-width: none; overflow-wrap: anywhere; }
 .body > :first-child { margin-top: 0; }
 .body > :last-child { margin-bottom: 0; }
 .body code { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; }
@@ -108,8 +108,8 @@ header select { background: var(--surface); border: 1px solid var(--line); borde
 .code pre code { background: none; padding: 0; }
 
 /* composer */
-.err { max-width: 760px; width: 100%; margin: 0 auto 8px; padding: 10px 20px; color: #d14b3f; font-size: 14px; }
-.composer { max-width: 760px; width: 100%; margin: 0 auto; padding: 0 20px 14px; }
+.err { max-width: var(--chat-w); width: 100%; margin: 0 auto 8px; padding: 10px 20px; color: #d14b3f; font-size: 14px; }
+.composer { max-width: var(--chat-w); width: 100%; margin: 0 auto; padding: 0 20px 14px; }
 .box { display: flex; align-items: flex-end; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 8px 8px 8px 16px; box-shadow: var(--shadow); transition: border-color 0.15s, box-shadow 0.15s; }
 .box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .box textarea { flex: 1; resize: none; max-height: 200px; field-sizing: content; background: none; border: 0; outline: 0; padding: 8px 0; line-height: 1.5; }
@@ -131,3 +131,32 @@ header select { background: var(--surface); border: 1px solid var(--line); borde
   .av.pulse { animation: none; }
   .side, .chips button, .go { transition: none; }
 }
+
+/* wider chat + system stats + retry */
+:root { --chat-w: 980px; }
+.stats { display: flex; align-items: center; gap: 14px; font-size: 12.5px; color: var(--muted); }
+.stat { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.stat b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.bar { width: 46px; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.4s; }
+.bar i.hot { background: #d14b3f; }
+.fail { display: flex; align-items: center; gap: 12px; align-self: flex-start; padding: 10px 14px; border: 1px solid rgba(209, 75, 63, 0.35); background: rgba(209, 75, 63, 0.08); border-radius: 12px; font-size: 14px; }
+.fail button { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 6px 14px; font-weight: 500; flex: none; }
+@media (max-width: 720px) { .stat .bar { display: none; } .stats { gap: 8px; } }
+
+/* folder storage panel */
+.side nav { flex: 1; min-height: 0; }
+.storage { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 8px; }
+.storage p { margin: 0; line-height: 1.45; }
+.storage b { color: var(--ink); font-weight: 500; overflow-wrap: anywhere; }
+.storage button { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-weight: 500; }
+.storage button:hover { border-color: var(--accent); }
+.storage .bad { color: #d14b3f; }
+.ok { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 7px; }
+.storage .row { display: flex; gap: 8px; }
+.storage .row button { flex: 1; }
+.storage button:disabled { opacity: 0.4; cursor: default; }
+
+/* brand */
+.brand { gap: 10px; font-size: 17px; letter-spacing: -0.01em; }
+.logo { flex: none; }
