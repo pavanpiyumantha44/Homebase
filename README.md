@@ -48,7 +48,7 @@ ollama serve   # skip if Ollama already runs as a background service
 ### Run it
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/pavanpiyumantha44/Homebase.git
 cd homebase
 npm install
 npm run dev
